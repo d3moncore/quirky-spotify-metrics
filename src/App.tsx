@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import TopTracks from "./pages/TopTracks";
 import TopArtists from "./pages/TopArtists";
 import NotFound from "./pages/NotFound";
+import Callback from "./pages/Callback";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/callback" element={<Callback />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/top-tracks" element={<TopTracks />} />
           <Route path="/top-artists" element={<TopArtists />} />

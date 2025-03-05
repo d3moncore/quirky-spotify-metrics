@@ -36,6 +36,8 @@ interface SpotifyTrack {
     images: { url: string }[];
   };
   duration_ms: number;
+  // Adding missing property that was causing the error
+  popularity?: number;
 }
 
 interface SpotifyArtist {

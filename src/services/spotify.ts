@@ -1,4 +1,3 @@
-
 // Constants for Spotify API
 const CLIENT_ID = "466f878e480043b0a05c5f2c5bc07f63"; // Replace with your Spotify Client ID
 const REDIRECT_URI = "http://localhost:8080/callback";
@@ -17,7 +16,7 @@ const SCOPES = [
 ];
 
 // Backend API URL
-const BACKEND_API_URL = "http://localhost:5000/api";
+const BACKEND_API_URL = "http://localhost:8000/api";
 
 // Generate random state for auth
 const generateRandomString = (length: number) => {
@@ -96,14 +95,14 @@ export const processAuth = () => {
 export const isTokenValid = () => {
   const token = localStorage.getItem("spotify_token");
   const expiresAtStr = localStorage.getItem("spotify_token_expires_at");
-  
+
   if (!token || !expiresAtStr) {
     return false;
   }
-  
+
   const expiresAt = parseInt(expiresAtStr);
   const now = new Date().getTime();
-  
+
   return now < expiresAt;
 };
 
@@ -113,22 +112,26 @@ export const spotifyFetch = async (
   options: RequestInit = {}
 ) => {
   const token = localStorage.getItem("spotify_token");
-  
+
   if (!token) {
     throw new Error("No Spotify token found");
   }
 
   // Add a trailing slash to BACKEND_API_URL if it doesn't have one
-  const baseUrl = BACKEND_API_URL.endsWith('/') ? BACKEND_API_URL : `${BACKEND_API_URL}/`;
-  
+  const baseUrl = BACKEND_API_URL.endsWith("/")
+    ? BACKEND_API_URL
+    : `${BACKEND_API_URL}/`;
+
   // Remove leading slash from endpoint if it exists
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
-  
+  const cleanEndpoint = endpoint.startsWith("/")
+    ? endpoint.substring(1)
+    : endpoint;
+
   // Build the full URL
   const url = `${baseUrl}${cleanEndpoint}`;
-  
+
   console.log(`Fetching from: ${url}`);
-  
+
   try {
     // Add credentials: 'include' to ensure cookies are sent with the request
     const fetchOptions = {
@@ -138,11 +141,11 @@ export const spotifyFetch = async (
         "Content-Type": "application/json",
         ...options.headers,
       },
-      credentials: 'include' as RequestCredentials,
+      credentials: "include" as RequestCredentials,
     };
-    
+
     console.log("Fetch options:", JSON.stringify(fetchOptions, null, 2));
-    
+
     const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
@@ -156,7 +159,10 @@ export const spotifyFetch = async (
       // Handle CORS errors separately for better debugging
       if (response.status === 0) {
         console.error("CORS error or network failure detected");
-        throw new Error("CORS error or network failure - Check that backend server is running at " + BACKEND_API_URL);
+        throw new Error(
+          "CORS error or network failure - Check that backend server is running at " +
+            BACKEND_API_URL
+        );
       }
 
       const errorText = await response.text();
@@ -167,7 +173,7 @@ export const spotifyFetch = async (
       } catch (e) {
         errorMessage = errorText || errorMessage;
       }
-      
+
       console.error(`API Error (${response.status}):`, errorMessage);
       throw new Error(errorMessage);
     }
@@ -216,7 +222,7 @@ export const checkBackendHealth = async () => {
   try {
     const response = await fetch(`${BACKEND_API_URL}/health`, {
       method: "GET",
-      credentials: 'include',
+      credentials: "include",
     });
     return response.ok;
   } catch (error) {

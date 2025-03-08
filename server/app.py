@@ -11,10 +11,15 @@ from collections import defaultdict
 app = Flask(__name__)
 # Configure CORS to allow requests from our React app
 CORS(app, 
-     resources={r"/api/*": {"origins": ["http://localhost:8080", "http://localhost:5173"]}},
-     supports_credentials=True,
-     allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+     resources={r"/api/*": {
+         "origins": ["http://localhost:8080", "http://localhost:8000"],
+         "allow_headers": ["Content-Type", "Authorization"],
+         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         "supports_credentials": True,
+         "expose_headers": ["Content-Type", "Authorization"],
+         "max_age": 3600
+     }},
+     supports_credentials=True)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -349,4 +354,4 @@ def health_check():
 
 if __name__ == '__main__':
     logger.info("Starting Spotify Clustering API Server on port 5000")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=8000, debug=True)

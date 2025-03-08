@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import * as SpotifyService from '@/services/spotify';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 
 const PlaylistClustering = () => {
   const { isAuthenticated } = useSpotifyAuth();
@@ -19,6 +19,7 @@ const PlaylistClustering = () => {
   const [clusteringMethod, setClusteringMethod] = useState<string>('kmeans');
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingPlaylists, setLoadingPlaylists] = useState<boolean>(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Fetch user playlists when component mounts
   React.useEffect(() => {
@@ -28,17 +29,35 @@ const PlaylistClustering = () => {
   }, [isAuthenticated]);
 
   const fetchUserPlaylists = async () => {
+    if (!isAuthenticated) {
+      return;
+    }
+
     try {
       setLoadingPlaylists(true);
+      setFetchError(null);
+      console.log('Fetching user playlists...');
       const data = await SpotifyService.getUserPlaylists();
-      setPlaylists(data.items || []);
+      console.log('Playlists fetched:', data);
+      
+      if (data && data.items) {
+        setPlaylists(data.items);
+      } else {
+        console.error('Unexpected playlist data format:', data);
+        setPlaylists([]);
+        setFetchError('Received invalid playlist data format from the server');
+      }
     } catch (error) {
       console.error('Error fetching playlists:', error);
+      setFetchError(error instanceof Error ? error.message : 'Failed to fetch your playlists');
+      
       toast({
         title: 'Error',
-        description: 'Failed to fetch your playlists. Please try again later.',
+        description: error instanceof Error ? error.message : 'Failed to fetch your playlists. Please try again later.',
         variant: 'destructive',
       });
+      
+      setPlaylists([]);
     } finally {
       setLoadingPlaylists(false);
     }
@@ -74,7 +93,7 @@ const PlaylistClustering = () => {
       console.error('Error creating clusters:', error);
       toast({
         title: 'Error',
-        description: 'Failed to create clustered playlists. Please try again later.',
+        description: error instanceof Error ? error.message : 'Failed to create clustered playlists. Please try again later.',
         variant: 'destructive',
       });
     } finally {
@@ -113,6 +132,19 @@ const PlaylistClustering = () => {
               <div className="flex justify-center py-4">
                 <Loader2 className="h-5 w-5 animate-spin text-spotify-green" />
               </div>
+            ) : fetchError ? (
+              <div className="space-y-2">
+                <div className="text-destructive text-sm py-2">{fetchError}</div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full flex items-center justify-center"
+                  onClick={fetchUserPlaylists}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Retry
+                </Button>
+              </div>
             ) : (
               <Select
                 value={selectedPlaylistId}
@@ -122,11 +154,17 @@ const PlaylistClustering = () => {
                   <SelectValue placeholder="Choose a playlist" />
                 </SelectTrigger>
                 <SelectContent>
-                  {playlists.map((playlist) => (
-                    <SelectItem key={playlist.id} value={playlist.id}>
-                      {playlist.name}
+                  {playlists.length > 0 ? (
+                    playlists.map((playlist) => (
+                      <SelectItem key={playlist.id} value={playlist.id}>
+                        {playlist.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-playlists" disabled>
+                      No playlists found
                     </SelectItem>
-                  ))}
+                  )}
                 </SelectContent>
               </Select>
             )}

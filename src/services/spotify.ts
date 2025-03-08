@@ -98,37 +98,59 @@ export const spotifyFetch = async (
   options: RequestInit = {}
 ) => {
   const token = localStorage.getItem("spotify_token");
-
+  
   if (!token) {
     throw new Error("No Spotify token found");
   }
 
-  // All requests now go through our backend
-  const url = `${BACKEND_API_URL}/${endpoint}`;
+  // Add a trailing slash to BACKEND_API_URL if it doesn't have one
+  const baseUrl = BACKEND_API_URL.endsWith('/') ? BACKEND_API_URL : `${BACKEND_API_URL}/`;
   
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-  });
+  // Remove leading slash from endpoint if it exists
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+  
+  // Build the full URL
+  const url = `${baseUrl}${cleanEndpoint}`;
+  
+  console.log(`Fetching from: ${url}`);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    });
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      // Token expired
-      localStorage.removeItem("spotify_token");
-      localStorage.removeItem("spotify_token_expires_at");
-      window.location.href = "/";
-      throw new Error("Spotify token expired");
+    if (!response.ok) {
+      if (response.status === 401) {
+        // Token expired
+        localStorage.removeItem("spotify_token");
+        localStorage.removeItem("spotify_token_expires_at");
+        window.location.href = "/";
+        throw new Error("Spotify token expired");
+      }
+
+      const errorText = await response.text();
+      let errorMessage = "Error from Backend API";
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.message || errorJson.error || errorMessage;
+      } catch (e) {
+        errorMessage = errorText || errorMessage;
+      }
+      
+      console.error(`API Error (${response.status}):`, errorMessage);
+      throw new Error(errorMessage);
     }
 
-    const error = await response.json();
-    throw new Error(error.message || "Error from Backend API");
+    return response.json();
+  } catch (error) {
+    console.error("Spotify API fetch error:", error);
+    throw error;
   }
-
-  return response.json();
 };
 
 // API endpoints - now all go through our backend which proxies to Spotify

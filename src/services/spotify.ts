@@ -130,14 +130,20 @@ export const spotifyFetch = async (
   console.log(`Fetching from: ${url}`);
   
   try {
-    const response = await fetch(url, {
+    // Add credentials: 'include' to ensure cookies are sent with the request
+    const fetchOptions = {
       ...options,
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         ...options.headers,
       },
-    });
+      credentials: 'include' as RequestCredentials,
+    };
+    
+    console.log("Fetch options:", JSON.stringify(fetchOptions, null, 2));
+    
+    const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
       if (response.status === 401) {
@@ -145,6 +151,12 @@ export const spotifyFetch = async (
         localStorage.removeItem("spotify_token");
         localStorage.removeItem("spotify_token_expires_at");
         throw new Error("Spotify token expired");
+      }
+
+      // Handle CORS errors separately for better debugging
+      if (response.status === 0) {
+        console.error("CORS error or network failure detected");
+        throw new Error("CORS error or network failure - Check that backend server is running at " + BACKEND_API_URL);
       }
 
       const errorText = await response.text();
@@ -197,4 +209,18 @@ export const createClusteredPlaylists = async (
       clusteringMethod,
     }),
   });
+};
+
+// Health check function to test backend connectivity
+export const checkBackendHealth = async () => {
+  try {
+    const response = await fetch(`${BACKEND_API_URL}/health`, {
+      method: "GET",
+      credentials: 'include',
+    });
+    return response.ok;
+  } catch (error) {
+    console.error("Backend health check failed:", error);
+    return false;
+  }
 };

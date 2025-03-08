@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import spotipy
@@ -11,7 +10,11 @@ from collections import defaultdict
 
 app = Flask(__name__)
 # Configure CORS to allow requests from our React app
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:8080", "http://localhost:5173"]}})
+CORS(app, 
+     resources={r"/api/*": {"origins": ["http://localhost:8080", "http://localhost:5173"]}},
+     supports_credentials=True,
+     allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -105,7 +108,9 @@ def get_user_playlists():
     
     sp = create_spotify_client(token)
     try:
+        logger.info("Fetching user playlists")
         playlists = sp.current_user_playlists()
+        logger.info(f"Successfully fetched {len(playlists.get('items', []))} playlists")
         return jsonify(playlists)
     except Exception as e:
         logger.error(f"Error getting playlists: {str(e)}")
@@ -324,16 +329,24 @@ def cluster_by_artist(tracks, num_clusters):
 def get_token_from_header():
     auth_header = request.headers.get('Authorization')
     if not auth_header:
+        logger.warning("No Authorization header found in request")
         return None
     
     parts = auth_header.split()
     if parts[0].lower() != 'bearer' or len(parts) != 2:
+        logger.warning("Invalid Authorization header format")
         return None
     
+    logger.info("Successfully extracted token from request")
     return parts[1]
 
 def create_spotify_client(token):
     return spotipy.Spotify(auth=token)
 
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({"status": "ok", "message": "Backend is running"}), 200
+
 if __name__ == '__main__':
+    logger.info("Starting Spotify Clustering API Server on port 5000")
     app.run(host='0.0.0.0', port=5000, debug=True)

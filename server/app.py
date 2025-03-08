@@ -10,7 +10,8 @@ from sklearn.cluster import KMeans
 from collections import defaultdict
 
 app = Flask(__name__)
-CORS(app)
+# Configure CORS to allow requests from our React app
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:8080", "http://localhost:5173"]}})
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

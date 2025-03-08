@@ -1,3 +1,4 @@
+
 // Constants for Spotify API
 const CLIENT_ID = "466f878e480043b0a05c5f2c5bc07f63"; // Replace with your Spotify Client ID
 const REDIRECT_URI = "http://localhost:8080/callback";
@@ -102,66 +103,35 @@ export const spotifyFetch = async (
     throw new Error("No Spotify token found");
   }
 
-  // For direct Spotify API calls
-  if (endpoint.startsWith("https://")) {
-    const url = endpoint.startsWith("https://")
-      ? endpoint
-      : `https://api.spotify.com/v1/${endpoint}`;
+  // All requests now go through our backend
+  const url = `${BACKEND_API_URL}/${endpoint}`;
+  
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
 
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        // Token expired
-        localStorage.removeItem("spotify_token");
-        localStorage.removeItem("spotify_token_expires_at");
-        window.location.href = "/";
-        throw new Error("Spotify token expired");
-      }
-
-      const error = await response.json();
-      throw new Error(error.error.message || "Error from Spotify API");
+  if (!response.ok) {
+    if (response.status === 401) {
+      // Token expired
+      localStorage.removeItem("spotify_token");
+      localStorage.removeItem("spotify_token_expires_at");
+      window.location.href = "/";
+      throw new Error("Spotify token expired");
     }
 
-    return response.json();
-  } else {
-    // Use our Python backend for everything else
-    const url = `${BACKEND_API_URL}/${endpoint}`;
-
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        // Token expired
-        localStorage.removeItem("spotify_token");
-        localStorage.removeItem("spotify_token_expires_at");
-        window.location.href = "/";
-        throw new Error("Spotify token expired");
-      }
-
-      const error = await response.json();
-      throw new Error(error.message || "Error from Backend API");
-    }
-
-    return response.json();
+    const error = await response.json();
+    throw new Error(error.message || "Error from Backend API");
   }
+
+  return response.json();
 };
 
-// API endpoints
+// API endpoints - now all go through our backend which proxies to Spotify
 export const getCurrentUser = () => spotifyFetch("me");
 
 export const getTopTracks = (timeRange = "medium_term", limit = 20) =>
@@ -173,7 +143,7 @@ export const getTopArtists = (timeRange = "medium_term", limit = 20) =>
 export const getRecentlyPlayed = (limit = 20) =>
   spotifyFetch(`me/player/recently-played?limit=${limit}`);
 
-// New playlist clustering functionality
+// Playlist functionality
 export const getLikedSongs = () => spotifyFetch("me/tracks");
 
 export const getUserPlaylists = () => spotifyFetch("me/playlists");

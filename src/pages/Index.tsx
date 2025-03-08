@@ -1,20 +1,13 @@
-
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import SpotifyLogin from "@/components/SpotifyLogin";
 import AnimatedBackground from "@/components/AnimatedBackground";
-import { useSpotifyAuth } from "@/hooks/useSpotify";
+import { useAuth } from "@/contexts/AuthContext";
 import PlaylistClustering from "@/components/PlaylistClustering";
 
 const Index = () => {
-  const { login, isAuthenticated } = useSpotifyAuth();
+  const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-
-  // React.useEffect(() => {
-  //   if (isAuthenticated) {
-  //     navigate('/dashboard');
-  //   }
-  // }, [isAuthenticated, navigate]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative">

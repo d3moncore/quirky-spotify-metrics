@@ -92,6 +92,21 @@ export const processAuth = () => {
   return access_token;
 };
 
+// Check if token is valid
+export const isTokenValid = () => {
+  const token = localStorage.getItem("spotify_token");
+  const expiresAtStr = localStorage.getItem("spotify_token_expires_at");
+  
+  if (!token || !expiresAtStr) {
+    return false;
+  }
+  
+  const expiresAt = parseInt(expiresAtStr);
+  const now = new Date().getTime();
+  
+  return now < expiresAt;
+};
+
 // API request helper
 export const spotifyFetch = async (
   endpoint: string,
@@ -129,7 +144,6 @@ export const spotifyFetch = async (
         // Token expired
         localStorage.removeItem("spotify_token");
         localStorage.removeItem("spotify_token_expires_at");
-        window.location.href = "/";
         throw new Error("Spotify token expired");
       }
 

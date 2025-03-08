@@ -1,8 +1,6 @@
-
-import React, { useState } from 'react';
-import { useSpotifyAuth } from '@/hooks/useSpotify';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
@@ -10,7 +8,7 @@ import * as SpotifyService from '@/services/spotify';
 import { Loader2, RefreshCw } from 'lucide-react';
 
 const PlaylistClustering = () => {
-  const { isAuthenticated } = useSpotifyAuth();
+  const { isAuthenticated } = useAuth();
   const { toast } = useToast();
   const [sourceType, setSourceType] = useState<'liked' | 'playlist'>('liked');
   const [playlists, setPlaylists] = useState<any[]>([]);
@@ -21,8 +19,8 @@ const PlaylistClustering = () => {
   const [loadingPlaylists, setLoadingPlaylists] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // Fetch user playlists when component mounts
-  React.useEffect(() => {
+  // Fetch user playlists when component mounts or auth state changes
+  useEffect(() => {
     if (isAuthenticated) {
       fetchUserPlaylists();
     }

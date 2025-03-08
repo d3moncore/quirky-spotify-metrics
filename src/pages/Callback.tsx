@@ -1,32 +1,19 @@
 
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSpotifyAuth } from '@/hooks/useSpotify';
-import { useToast } from '@/components/ui/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Callback = () => {
   const navigate = useNavigate();
-  const { token, loading } = useSpotifyAuth();
-  const { toast } = useToast();
+  const { isAuthenticated, loading } = useAuth();
 
   useEffect(() => {
     if (!loading) {
-      if (token) {
-        toast({
-          title: "Authentication Successful",
-          description: "You have successfully connected your Spotify account.",
-        });
+      if (isAuthenticated) {
         navigate('/dashboard');
-      } else {
-        toast({
-          title: "Authentication Failed",
-          description: "Could not connect to Spotify. Please try again.",
-          variant: "destructive",
-        });
-        navigate('/');
       }
     }
-  }, [token, loading, navigate, toast]);
+  }, [isAuthenticated, loading, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center">

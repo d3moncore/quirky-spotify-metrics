@@ -6,10 +6,10 @@ from spotipy.oauth2 import SpotifyOAuth
 import os
 import logging
 import numpy as np
-from sklearn.cluster import KMeans
 from collections import defaultdict
 import re
-import openai
+import requests
+import json
 
 app = Flask(__name__)
 # Configure CORS to allow requests from our React app
@@ -27,8 +27,8 @@ CORS(app,
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configure OpenAI API key - replace with your key or set in environment
-openai.api_key = "YOUR_OPENAI_API_KEY"  # Replace with your key or use os.environ.get("OPENAI_API_KEY")
+# Configure LM Studio API - running locally at this URL, adjust if needed
+LM_STUDIO_API_URL = "http://localhost:1234/v1/chat/completions"
 
 @app.route('/api/me', methods=['GET'])
 def get_current_user():
@@ -112,7 +112,7 @@ def generate_playlist_from_prompt():
             return jsonify({"error": "No tracks found in the source playlist"}), 400
         
         # Select tracks based on the prompt
-        selected_tracks = select_tracks_for_prompt(tracks, prompt)
+        selected_tracks = select_tracks_with_local_llm(tracks, prompt)
         
         if len(selected_tracks) == 0:
             return jsonify({"error": "No tracks match the prompt criteria"}), 400
@@ -148,7 +148,7 @@ def generate_playlist_from_prompt():
         logger.error(f"Error generating playlist: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-def select_tracks_for_prompt(tracks, prompt):
+def select_tracks_with_local_llm(tracks, prompt):
     try:
         # Extract track details for analysis
         track_details = []
@@ -161,55 +161,74 @@ def select_tracks_for_prompt(tracks, prompt):
                 "track_obj": track
             })
         
-        # Create a list of track descriptions
-        track_descriptions = [f"'{t['name']}' by {t['artists']}" for t in track_details]
+        # Create a list of track descriptions with indices
+        track_descriptions = []
+        for i, t in enumerate(track_details[:100]):  # Limit to first 100 tracks to avoid context length issues
+            track_descriptions.append(f"{i}: '{t['name']}' by {t['artists']}")
         
-        # Use OpenAI to select tracks based on the prompt
+        # Create a prompt for the local LLM
         message = f"""
         I have a list of songs and need to select ones that match this theme: "{prompt}".
         
         Here are the songs:
-        {", ".join(track_descriptions[:100])}
+        {"\n".join(track_descriptions)}
         
         Please respond with ONLY the indices (0-based) of songs that strongly match the theme.
         Format your response as a JSON array of integers, e.g., [0, 5, 10]
-        If there are more than 100 songs in the list, focus on quality over quantity.
+        Focus on quality over quantity - only select songs that truly match the theme.
         """
         
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a music curator that selects songs based on themes and moods."},
-                {"role": "user", "content": message}
-            ],
-            temperature=0.7,
-            max_tokens=1000
+        logger.info("Sending request to local LM Studio API")
+        
+        # Make request to LM Studio API (DeepSeek R1 model)
+        response = requests.post(
+            LM_STUDIO_API_URL,
+            headers={"Content-Type": "application/json"},
+            json={
+                "messages": [
+                    {"role": "system", "content": "You are a music curator that selects songs based on themes and moods."},
+                    {"role": "user", "content": message}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 1000
+            }
         )
         
-        # Extract indices from response
-        response_text = response['choices'][0]['message']['content']
-        logger.info(f"AI Response: {response_text}")
+        if response.status_code != 200:
+            logger.error(f"LM Studio API error: {response.text}")
+            raise Exception(f"LM Studio API returned status code {response.status_code}")
+        
+        # Parse response
+        llm_response = response.json()
+        response_text = llm_response['choices'][0]['message']['content']
+        logger.info(f"LLM Response: {response_text}")
         
         # Try to parse the response as JSON
         try:
             # Find anything that looks like a JSON array in the response
             match = re.search(r'\[.*?\]', response_text, re.DOTALL)
             if match:
-                indices = eval(match.group(0))  # Using eval to parse the array
+                indices = json.loads(match.group(0))  # Parse the array safely
                 selected_tracks = [tracks[i] for i in indices if i < len(tracks)]
                 return selected_tracks
         except Exception as e:
-            logger.error(f"Error parsing AI response: {str(e)}")
+            logger.error(f"Error parsing LLM response: {str(e)}")
         
         # Fallback approach if JSON parsing fails
         # Look for any numbers in the response
         indices = [int(num) for num in re.findall(r'\b\d+\b', response_text)]
         selected_tracks = [tracks[i] for i in indices if i < len(tracks)]
         
+        if not selected_tracks and tracks:
+            # If no tracks were selected but we have tracks, return a small sample
+            import random
+            logger.warning("No tracks matched criteria, selecting a small random sample")
+            return random.sample(tracks, min(3, len(tracks)))
+            
         return selected_tracks
         
     except Exception as e:
-        logger.error(f"Error in track selection: {str(e)}")
+        logger.error(f"Error in track selection with local LLM: {str(e)}")
         # Fallback: Return a few random tracks
         import random
         return random.sample(tracks, min(5, len(tracks)))
@@ -243,6 +262,28 @@ def create_spotify_client(token):
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "ok", "message": "Backend is running"}), 200
+
+@app.route('/api/llm/health', methods=['GET'])
+def llm_health_check():
+    """Check if the local LLM is accessible"""
+    try:
+        response = requests.post(
+            LM_STUDIO_API_URL,
+            headers={"Content-Type": "application/json"},
+            json={
+                "messages": [
+                    {"role": "user", "content": "Say hello"}
+                ],
+                "max_tokens": 10
+            },
+            timeout=5  # 5-second timeout for quick check
+        )
+        if response.status_code == 200:
+            return jsonify({"status": "ok", "message": "Local LLM is accessible"}), 200
+        else:
+            return jsonify({"status": "error", "message": f"Local LLM returned status {response.status_code}"}), 500
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Could not connect to local LLM: {str(e)}"}), 500
 
 if __name__ == '__main__':
     logger.info("Starting Playlist Generator API Server on port 8000")

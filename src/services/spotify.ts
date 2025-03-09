@@ -1,4 +1,3 @@
-
 // Constants for Spotify API
 const CLIENT_ID = "466f878e480043b0a05c5f2c5bc07f63"; // Replace with your Spotify Client ID
 const REDIRECT_URI = "http://localhost:8080/callback";
@@ -214,6 +213,24 @@ export const checkBackendHealth = async () => {
     return response.ok;
   } catch (error) {
     console.error("Backend health check failed:", error);
+    return false;
+  }
+};
+
+// Check if the local LLM is accessible
+export const checkLLMHealth = async () => {
+  try {
+    const response = await fetch(`${BACKEND_API_URL}/llm/health`, {
+      method: "GET",
+      credentials: "include",
+    });
+    if (response.ok) {
+      return true;
+    }
+    console.error("LLM health check failed:", await response.text());
+    return false;
+  } catch (error) {
+    console.error("LLM health check failed:", error);
     return false;
   }
 };

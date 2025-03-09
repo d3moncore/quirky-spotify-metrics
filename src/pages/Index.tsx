@@ -29,19 +29,19 @@ const Index = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16 opacity-0 animate-in stagger-4">
           <FeatureCard
-            icon="✨"
-            title="AI Powered"
-            description="Intelligent selection based on your natural language description"
+            icon="🧠"
+            title="Local AI Powered"
+            description="Uses your local DeepSeek R1 model running on LM Studio to intelligently select songs"
           />
           <FeatureCard
             icon="📝"
-            title="Easy to Use"
-            description="Simply describe what you want, and we'll create the perfect playlist"
+            title="Natural Language"
+            description="Describe your mood or scenario, and get a perfectly curated playlist"
           />
           <FeatureCard
-            icon="🎵"
-            title="Quality Focused"
-            description="We prioritize perfect matches over quantity, ensuring every song fits your mood"
+            icon="🔒"
+            title="Private & Secure"
+            description="All AI processing happens locally on your machine - no data sent to external services"
           />
         </div>
       </div>

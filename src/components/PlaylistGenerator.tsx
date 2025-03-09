@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import * as SpotifyService from '@/services/spotify';
-import { Loader2, RefreshCw, Music, Wand2 } from 'lucide-react';
+import { Loader2, RefreshCw, Music, Wand2, AlertTriangle, Check } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const PlaylistGenerator = () => {
   const { isAuthenticated } = useAuth();
@@ -19,6 +20,13 @@ const PlaylistGenerator = () => {
   const [loadingPlaylists, setLoadingPlaylists] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [generatedPlaylist, setGeneratedPlaylist] = useState<any>(null);
+  const [llmConnected, setLlmConnected] = useState<boolean | null>(null);
+  const [checkingLlm, setCheckingLlm] = useState<boolean>(false);
+
+  // Check LLM connection when component mounts
+  useEffect(() => {
+    checkLLMConnection();
+  }, []);
 
   // Fetch user playlists when component mounts or auth state changes
   useEffect(() => {
@@ -26,6 +34,31 @@ const PlaylistGenerator = () => {
       fetchUserPlaylists();
     }
   }, [isAuthenticated]);
+
+  const checkLLMConnection = async () => {
+    try {
+      setCheckingLlm(true);
+      const isConnected = await SpotifyService.checkLLMHealth();
+      setLlmConnected(isConnected);
+      
+      if (!isConnected) {
+        toast({
+          title: 'LM Studio Not Detected',
+          description: 'Please ensure LM Studio is running with the DeepSeek R1 model and the API server enabled.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      setLlmConnected(false);
+      toast({
+        title: 'LM Studio Connection Error',
+        description: 'Could not connect to LM Studio API.',
+        variant: 'destructive',
+      });
+    } finally {
+      setCheckingLlm(false);
+    }
+  };
 
   const fetchUserPlaylists = async () => {
     if (!isAuthenticated) {
@@ -64,6 +97,16 @@ const PlaylistGenerator = () => {
 
   const handleGeneratePlaylist = async () => {
     try {
+      // First check if LLM is connected
+      if (llmConnected === false) {
+        toast({
+          title: 'LM Studio Not Connected',
+          description: 'Please start LM Studio with the DeepSeek R1 model and try again.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
       setLoading(true);
       setGeneratedPlaylist(null);
       
@@ -150,6 +193,43 @@ const PlaylistGenerator = () => {
         Describe the perfect playlist and let AI create it for you
       </p>
 
+      {llmConnected === false && (
+        <Alert variant="destructive" className="bg-red-100 border-red-200">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            LM Studio connection not detected. Please ensure LM Studio is running with API server enabled.
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="mt-2 w-full"
+              onClick={checkLLMConnection} 
+              disabled={checkingLlm}
+            >
+              {checkingLlm ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Checking connection...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Retry Connection
+                </>
+              )}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {llmConnected === true && (
+        <Alert className="bg-green-100 border-green-200">
+          <Check className="h-4 w-4 text-green-600" />
+          <AlertDescription className="text-green-800">
+            Connected to local LM Studio model
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium mb-2">Source</label>
@@ -228,7 +308,7 @@ const PlaylistGenerator = () => {
         <Button
           className="w-full bg-spotify-green hover:bg-spotify-green/90"
           onClick={handleGeneratePlaylist}
-          disabled={loading || (sourceType === 'playlist' && !selectedPlaylistId) || !prompt.trim()}
+          disabled={loading || (sourceType === 'playlist' && !selectedPlaylistId) || !prompt.trim() || llmConnected === false}
         >
           {loading ? (
             <>

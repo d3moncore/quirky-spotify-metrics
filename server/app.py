@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import spotipy
@@ -7,12 +8,14 @@ import logging
 import numpy as np
 from sklearn.cluster import KMeans
 from collections import defaultdict
+import re
+import openai
 
 app = Flask(__name__)
 # Configure CORS to allow requests from our React app
 CORS(app, 
      resources={r"/api/*": {
-         "origins": ["http://localhost:8080", "http://localhost:8000"],
+         "origins": ["http://localhost:8080", "http://localhost:5000", "http://localhost:8000"],
          "allow_headers": ["Content-Type", "Authorization"],
          "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
          "supports_credentials": True,
@@ -23,6 +26,9 @@ CORS(app,
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Configure OpenAI API key - replace with your key or set in environment
+openai.api_key = "YOUR_OPENAI_API_KEY"  # Replace with your key or use os.environ.get("OPENAI_API_KEY")
 
 @app.route('/api/me', methods=['GET'])
 def get_current_user():
@@ -37,76 +43,12 @@ def get_current_user():
         logger.error(f"Error getting current user: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/me/top/tracks', methods=['GET'])
-def get_top_tracks():
-    token = get_token_from_header()
-    if not token:
-        return jsonify({"error": "No token provided"}), 401
-    
-    time_range = request.args.get('time_range', 'medium_term')
-    limit = int(request.args.get('limit', 20))
-    
-    sp = create_spotify_client(token)
-    try:
-        return jsonify(sp.current_user_top_tracks(time_range=time_range, limit=limit))
-    except Exception as e:
-        logger.error(f"Error getting top tracks: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/me/top/artists', methods=['GET'])
-def get_top_artists():
-    token = get_token_from_header()
-    if not token:
-        return jsonify({"error": "No token provided"}), 401
-    
-    time_range = request.args.get('time_range', 'medium_term')
-    limit = int(request.args.get('limit', 20))
-    
-    sp = create_spotify_client(token)
-    try:
-        return jsonify(sp.current_user_top_artists(time_range=time_range, limit=limit))
-    except Exception as e:
-        logger.error(f"Error getting top artists: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/me/player/recently-played', methods=['GET'])
-def get_recently_played():
-    token = get_token_from_header()
-    if not token:
-        return jsonify({"error": "No token provided"}), 401
-    
-    limit = int(request.args.get('limit', 20))
-    
-    sp = create_spotify_client(token)
-    try:
-        return jsonify(sp.current_user_recently_played(limit=limit))
-    except Exception as e:
-        logger.error(f"Error getting recently played: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/me/tracks', methods=['GET'])
-def get_liked_songs():
-    token = get_token_from_header()
-    if not token:
-        return jsonify({"error": "No token provided"}), 401
-    
-    sp = create_spotify_client(token)
-    try:
-        results = sp.current_user_saved_tracks(limit=50)
-        tracks = results['items']
-        
-        # Get all liked songs, not just the first 50
-        while results['next']:
-            results = sp.next(results)
-            tracks.extend(results['items'])
-            
-        return jsonify({"items": tracks})
-    except Exception as e:
-        logger.error(f"Error getting liked songs: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/me/playlists', methods=['GET'])
+@app.route('/api/me/playlists', methods=['GET', 'OPTIONS'])
 def get_user_playlists():
+    # Handle preflight OPTIONS request
+    if request.method == "OPTIONS":
+        return handle_preflight()
+        
     token = get_token_from_header()
     if not token:
         return jsonify({"error": "No token provided"}), 401
@@ -121,8 +63,12 @@ def get_user_playlists():
         logger.error(f"Error getting playlists: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/playlists/cluster', methods=['POST'])
-def create_clustered_playlists():
+@app.route('/api/playlists/generate', methods=['POST', 'OPTIONS'])
+def generate_playlist_from_prompt():
+    # Handle preflight OPTIONS request
+    if request.method == "OPTIONS":
+        return handle_preflight()
+        
     token = get_token_from_header()
     if not token:
         return jsonify({"error": "No token provided"}), 401
@@ -132,8 +78,10 @@ def create_clustered_playlists():
         return jsonify({"error": "No data provided"}), 400
     
     source_id = data.get('sourcePlaylistId')
-    num_clusters = data.get('numberOfClusters', 3)
-    clustering_method = data.get('clusteringMethod', 'kmeans')
+    prompt = data.get('prompt')
+    
+    if not prompt:
+        return jsonify({"error": "No prompt provided"}), 400
     
     sp = create_spotify_client(token)
     user_id = sp.current_user()['id']
@@ -160,176 +108,120 @@ def create_clustered_playlists():
         
         logger.info(f"Retrieved {len(tracks)} tracks")
         
-        if len(tracks) < num_clusters:
-            return jsonify({"error": f"Not enough tracks ({len(tracks)}) to create {num_clusters} clusters"}), 400
+        if len(tracks) == 0:
+            return jsonify({"error": "No tracks found in the source playlist"}), 400
         
-        # Create clusters based on the method
-        clusters = []
-        if clustering_method == 'kmeans':
-            clusters = cluster_by_audio_features(sp, tracks, num_clusters)
-        elif clustering_method == 'genre':
-            clusters = cluster_by_genre(sp, tracks, num_clusters)
-        elif clustering_method == 'artist':
-            clusters = cluster_by_artist(tracks, num_clusters)
-        else:
-            return jsonify({"error": f"Unknown clustering method: {clustering_method}"}), 400
+        # Select tracks based on the prompt
+        selected_tracks = select_tracks_for_prompt(tracks, prompt)
         
-        # Create playlists for each cluster
-        created_playlists = []
+        if len(selected_tracks) == 0:
+            return jsonify({"error": "No tracks match the prompt criteria"}), 400
+        
+        # Create a new playlist
         source_name = "Liked Songs" if source_id == 'liked_songs' else sp.playlist(source_id)['name']
+        playlist_name = f"{prompt} (from {source_name})"
         
-        for i, cluster in enumerate(clusters):
-            if not cluster:  # Skip empty clusters
-                continue
-                
-            # Create a new playlist
-            playlist_name = f"Cluster {i+1} from {source_name}"
-            new_playlist = sp.user_playlist_create(
-                user=user_id,
-                name=playlist_name,
-                public=False,
-                description=f"Created by AI clustering from {source_name}"
-            )
-            
-            # Add tracks to the playlist (in batches of 100)
-            track_uris = [track['uri'] for track in cluster]
-            for j in range(0, len(track_uris), 100):
-                batch = track_uris[j:j+100]
-                sp.playlist_add_items(new_playlist['id'], batch)
-            
-            created_playlists.append({
-                "id": new_playlist['id'],
-                "name": playlist_name,
-                "tracks": len(cluster)
-            })
+        new_playlist = sp.user_playlist_create(
+            user=user_id,
+            name=playlist_name,
+            public=False,
+            description=f"Created based on prompt: '{prompt}' from {source_name}"
+        )
+        
+        # Add tracks to the playlist
+        track_uris = [track['uri'] for track in selected_tracks]
+        for i in range(0, len(track_uris), 100):  # Spotify has a limit of 100 tracks per request
+            batch = track_uris[i:i+100]
+            sp.playlist_add_items(new_playlist['id'], batch)
         
         return jsonify({
             "status": "success",
-            "clusters": created_playlists
+            "playlist": {
+                "id": new_playlist['id'],
+                "name": playlist_name,
+                "tracks": len(selected_tracks),
+                "prompt": prompt
+            }
         })
             
     except Exception as e:
-        logger.error(f"Error creating clusters: {str(e)}")
+        logger.error(f"Error generating playlist: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-def cluster_by_audio_features(sp, tracks, num_clusters):
-    # Extract track IDs
-    track_ids = [track['id'] for track in tracks if track['id']]
-    
-    # Get audio features for all tracks (in batches of 100)
-    all_features = []
-    for i in range(0, len(track_ids), 100):
-        batch_ids = track_ids[i:i+100]
-        features = sp.audio_features(batch_ids)
-        all_features.extend([f for f in features if f])
-    
-    # Map audio features to original tracks
-    features_dict = {f['id']: f for f in all_features if f}
-    
-    # Extract relevant features for clustering
-    feature_matrix = []
-    valid_tracks = []
-    
-    for track in tracks:
-        if track['id'] in features_dict:
-            features = features_dict[track['id']]
-            feature_vector = [
-                features['danceability'],
-                features['energy'],
-                features['valence'],
-                features['tempo'] / 200,  # Normalize tempo
-                features['acousticness'],
-                features['instrumentalness']
-            ]
-            feature_matrix.append(feature_vector)
-            valid_tracks.append(track)
-    
-    # Perform K-means clustering
-    kmeans = KMeans(n_clusters=num_clusters, random_state=42).fit(feature_matrix)
-    labels = kmeans.labels_
-    
-    # Group tracks by cluster
-    clusters = [[] for _ in range(num_clusters)]
-    for i, label in enumerate(labels):
-        clusters[label].append(valid_tracks[i])
-    
-    return clusters
+def select_tracks_for_prompt(tracks, prompt):
+    try:
+        # Extract track details for analysis
+        track_details = []
+        for track in tracks:
+            artists = ", ".join([artist['name'] for artist in track['artists']])
+            track_details.append({
+                "id": track['id'],
+                "name": track['name'],
+                "artists": artists,
+                "track_obj": track
+            })
+        
+        # Create a list of track descriptions
+        track_descriptions = [f"'{t['name']}' by {t['artists']}" for t in track_details]
+        
+        # Use OpenAI to select tracks based on the prompt
+        message = f"""
+        I have a list of songs and need to select ones that match this theme: "{prompt}".
+        
+        Here are the songs:
+        {", ".join(track_descriptions[:100])}
+        
+        Please respond with ONLY the indices (0-based) of songs that strongly match the theme.
+        Format your response as a JSON array of integers, e.g., [0, 5, 10]
+        If there are more than 100 songs in the list, focus on quality over quantity.
+        """
+        
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a music curator that selects songs based on themes and moods."},
+                {"role": "user", "content": message}
+            ],
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        # Extract indices from response
+        response_text = response['choices'][0]['message']['content']
+        logger.info(f"AI Response: {response_text}")
+        
+        # Try to parse the response as JSON
+        try:
+            # Find anything that looks like a JSON array in the response
+            match = re.search(r'\[.*?\]', response_text, re.DOTALL)
+            if match:
+                indices = eval(match.group(0))  # Using eval to parse the array
+                selected_tracks = [tracks[i] for i in indices if i < len(tracks)]
+                return selected_tracks
+        except Exception as e:
+            logger.error(f"Error parsing AI response: {str(e)}")
+        
+        # Fallback approach if JSON parsing fails
+        # Look for any numbers in the response
+        indices = [int(num) for num in re.findall(r'\b\d+\b', response_text)]
+        selected_tracks = [tracks[i] for i in indices if i < len(tracks)]
+        
+        return selected_tracks
+        
+    except Exception as e:
+        logger.error(f"Error in track selection: {str(e)}")
+        # Fallback: Return a few random tracks
+        import random
+        return random.sample(tracks, min(5, len(tracks)))
 
-def cluster_by_genre(sp, tracks, num_clusters):
-    # Get artist genres
-    artist_ids = list(set([artist['id'] for track in tracks for artist in track['artists']]))
-    
-    # Get artists' details (in batches of 50)
-    artist_details = {}
-    for i in range(0, len(artist_ids), 50):
-        batch_ids = artist_ids[i:i+50]
-        artists = sp.artists(batch_ids)
-        for artist in artists['artists']:
-            artist_details[artist['id']] = artist['genres']
-    
-    # Calculate genre frequency for each track
-    track_genres = {}
-    for track in tracks:
-        genres = []
-        for artist in track['artists']:
-            if artist['id'] in artist_details:
-                genres.extend(artist_details[artist['id']])
-        track_genres[track['id']] = list(set(genres))
-    
-    # Create genre frequency dictionary
-    all_genres = list(set([genre for genres in track_genres.values() for genre in genres]))
-    genre_to_idx = {genre: i for i, genre in enumerate(all_genres)}
-    
-    # Create genre vector for each track
-    feature_matrix = []
-    valid_tracks = []
-    
-    for track in tracks:
-        if track['id'] in track_genres and track_genres[track['id']]:
-            genre_vector = [0] * len(all_genres)
-            for genre in track_genres[track['id']]:
-                genre_vector[genre_to_idx[genre]] = 1
-            feature_matrix.append(genre_vector)
-            valid_tracks.append(track)
-    
-    if len(valid_tracks) < num_clusters:
-        # Not enough tracks with genre info, use artist-based clustering instead
-        return cluster_by_artist(tracks, num_clusters)
-    
-    # Perform K-means clustering
-    kmeans = KMeans(n_clusters=num_clusters, random_state=42).fit(feature_matrix)
-    labels = kmeans.labels_
-    
-    # Group tracks by cluster
-    clusters = [[] for _ in range(num_clusters)]
-    for i, label in enumerate(labels):
-        clusters[label].append(valid_tracks[i])
-    
-    return clusters
-
-def cluster_by_artist(tracks, num_clusters):
-    # Group tracks by artist
-    artist_tracks = defaultdict(list)
-    for track in tracks:
-        main_artist = track['artists'][0]['name']
-        artist_tracks[main_artist].append(track)
-    
-    # Sort artists by number of tracks
-    sorted_artists = sorted(artist_tracks.items(), key=lambda x: len(x[1]), reverse=True)
-    
-    # Create initial clusters with top artists
-    clusters = []
-    for i in range(min(num_clusters, len(sorted_artists))):
-        clusters.append(sorted_artists[i][1])
-    
-    # Distribute remaining tracks
-    if len(sorted_artists) > num_clusters:
-        for i in range(num_clusters, len(sorted_artists)):
-            # Add to the smallest cluster
-            smallest_cluster = min(range(num_clusters), key=lambda j: len(clusters[j]))
-            clusters[smallest_cluster].extend(sorted_artists[i][1])
-    
-    return clusters
+def handle_preflight():
+    """Handle preflight OPTIONS requests."""
+    response = jsonify({"status": "ok"})
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
 def get_token_from_header():
     auth_header = request.headers.get('Authorization')
@@ -353,5 +245,5 @@ def health_check():
     return jsonify({"status": "ok", "message": "Backend is running"}), 200
 
 if __name__ == '__main__':
-    logger.info("Starting Spotify Clustering API Server on port 5000")
+    logger.info("Starting Playlist Generator API Server on port 8000")
     app.run(host='0.0.0.0', port=8000, debug=True)

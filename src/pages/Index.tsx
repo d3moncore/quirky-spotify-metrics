@@ -1,13 +1,12 @@
+
 import React from "react";
-import { useNavigate } from "react-router-dom";
 import SpotifyLogin from "@/components/SpotifyLogin";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import { useAuth } from "@/contexts/AuthContext";
-import PlaylistClustering from "@/components/PlaylistClustering";
+import PlaylistGenerator from "@/components/PlaylistGenerator";
 
 const Index = () => {
   const { login, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative">
@@ -17,12 +16,12 @@ const Index = () => {
         {isAuthenticated ? (
           <div className="flex flex-col items-center mt-8">
             <h1 className="text-4xl md:text-5xl font-bold mb-6 text-spotify-gradient animate-in stagger-1">
-              Smart Playlist Creator
+              AI Playlist Generator
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mb-8 animate-in stagger-2 text-center">
-              Use our AI-powered clustering to organize your Spotify library into themed playlists
+              Use natural language to create the perfect playlist from your existing Spotify library
             </p>
-            <PlaylistClustering />
+            <PlaylistGenerator />
           </div>
         ) : (
           <SpotifyLogin onLogin={login} />
@@ -30,19 +29,19 @@ const Index = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16 opacity-0 animate-in stagger-4">
           <FeatureCard
-            icon="📊"
-            title="Visual Analytics"
-            description="See your listening history visualized with beautiful, interactive charts."
+            icon="✨"
+            title="AI Powered"
+            description="Intelligent selection based on your natural language description"
+          />
+          <FeatureCard
+            icon="📝"
+            title="Easy to Use"
+            description="Simply describe what you want, and we'll create the perfect playlist"
           />
           <FeatureCard
             icon="🎵"
-            title="Top Tracks"
-            description="Discover your most played songs over different time periods."
-          />
-          <FeatureCard
-            icon="🎤"
-            title="Artist Insights"
-            description="Explore your favorite artists and their influence on your music taste."
+            title="Quality Focused"
+            description="We prioritize perfect matches over quantity, ensuring every song fits your mood"
           />
         </div>
       </div>

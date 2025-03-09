@@ -1,3 +1,4 @@
+
 // Constants for Spotify API
 const CLIENT_ID = "466f878e480043b0a05c5f2c5bc07f63"; // Replace with your Spotify Client ID
 const REDIRECT_URI = "http://localhost:8080/callback";
@@ -185,34 +186,20 @@ export const spotifyFetch = async (
   }
 };
 
-// API endpoints - now all go through our backend which proxies to Spotify
+// API endpoints
 export const getCurrentUser = () => spotifyFetch("me");
-
-export const getTopTracks = (timeRange = "medium_term", limit = 20) =>
-  spotifyFetch(`me/top/tracks?time_range=${timeRange}&limit=${limit}`);
-
-export const getTopArtists = (timeRange = "medium_term", limit = 20) =>
-  spotifyFetch(`me/top/artists?time_range=${timeRange}&limit=${limit}`);
-
-export const getRecentlyPlayed = (limit = 20) =>
-  spotifyFetch(`me/player/recently-played?limit=${limit}`);
-
-// Playlist functionality
-export const getLikedSongs = () => spotifyFetch("me/tracks");
 
 export const getUserPlaylists = () => spotifyFetch("me/playlists");
 
-export const createClusteredPlaylists = async (
+export const generatePlaylistFromPrompt = async (
   sourcePlaylistId: string,
-  numberOfClusters: number,
-  clusteringMethod: string
+  prompt: string
 ) => {
-  return spotifyFetch("playlists/cluster", {
+  return spotifyFetch("playlists/generate", {
     method: "POST",
     body: JSON.stringify({
       sourcePlaylistId,
-      numberOfClusters,
-      clusteringMethod,
+      prompt,
     }),
   });
 };

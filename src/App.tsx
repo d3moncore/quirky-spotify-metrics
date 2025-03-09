@@ -6,11 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import Index from "./pages/Index";
-import Dashboard from "./pages/Dashboard";
-import TopTracks from "./pages/TopTracks";
-import TopArtists from "./pages/TopArtists";
-import NotFound from "./pages/NotFound";
 import Callback from "./pages/Callback";
+import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,9 +28,6 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/callback" element={<Callback />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/top-tracks" element={<TopTracks />} />
-            <Route path="/top-artists" element={<TopArtists />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

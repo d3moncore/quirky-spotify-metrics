@@ -190,17 +190,23 @@ export const getCurrentUser = () => spotifyFetch("me");
 
 export const getUserPlaylists = () => spotifyFetch("me/playlists");
 
-export const generatePlaylistFromPrompt = async (
-  sourcePlaylistId: string,
-  prompt: string
-) => {
-  return spotifyFetch("playlists/generate", {
-    method: "POST",
-    body: JSON.stringify({
-      sourcePlaylistId,
-      prompt,
-    }),
-  });
+// Update the generatePlaylistFromPrompt function
+export const generatePlaylistFromPrompt = async (sourcePlaylistId: string, prompt: string) => {
+    const response = await spotifyFetch("playlists/generate", {
+        method: "POST",
+        body: JSON.stringify({
+            sourcePlaylistId,
+            prompt
+        })
+    });
+    
+    return {
+        id: response.playlist.id,
+        name: response.playlist.name,
+        description: response.playlist.description,
+        tracks: response.playlist.tracks,
+        prompt: response.playlist.prompt
+    };
 };
 
 // Health check function to test backend connectivity
@@ -213,24 +219,6 @@ export const checkBackendHealth = async () => {
     return response.ok;
   } catch (error) {
     console.error("Backend health check failed:", error);
-    return false;
-  }
-};
-
-// Check if the local LLM is accessible
-export const checkLLMHealth = async () => {
-  try {
-    const response = await fetch(`${BACKEND_API_URL}/llm/health`, {
-      method: "GET",
-      credentials: "include",
-    });
-    if (response.ok) {
-      return true;
-    }
-    console.error("LLM health check failed:", await response.text());
-    return false;
-  } catch (error) {
-    console.error("LLM health check failed:", error);
     return false;
   }
 };
